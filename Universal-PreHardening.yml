@@ -33,7 +33,6 @@
     - name: vault_user_password
       prompt: "Enter the account password for the regular user"
       private: true
-
   vars:
     os_crypt_name: "crypt_root"
     vault_crypt_name: "secure_vault"
@@ -52,7 +51,7 @@
 
     - name: Dynamically identify the primary physical disk block device path
       ansible.builtin.set_fact:
-        target_disk: "/dev/{{ ansible_facts['devices'].keys() | select('match', '^(sda|vda|nvme[0-9]n[0-9]|sdm)$') | first }}"
+        target_disk: "/dev/{{ ansible_facts['devices'].keys() | select('match', '^(sda|vda|nvme[0-9]n[0-9]|sdm|vd[a-z]|xvd[a-z])$') | first }}"
       failed_when: target_disk is not defined
 
     - name: Detect active host target firmware configuration mode (BIOS vs UEFI)
@@ -65,6 +64,68 @@
         is_uefi: "{{ efi_check.stat.exists }}"
         p_suffix: "{{ 'p' if 'nvme' in target_disk else '' }}"
         vault_slice_start: "-{{ vault_size_input }}GiB"
+
+    # =========================================================================
+    # TRIPLE-CHECKED THREE-TIER HYBRID SWAP RATIO CALCULATION ENGINE
+    # =========================================================================
+    - name: Calculate variable swap file sizing threshold footprint bounds from memory capacity facts
+      ansible.builtin.set_fact:
+        stage1_swap_mb: >-
+          {{
+            (ansible_facts['memtotal_mb'] | int * 2.0) | int
+            if (ansible_facts['memtotal_mb'] | int <= 4096)
+            else (ansible_facts['memtotal_mb'] | int * 1.5) | int
+            if (ansible_facts['memtotal_mb'] | int > 4096 and ansible_facts['memtotal_mb'] | int < 8192)
+            else 4096
+          }}
+
+    - name: Ingest multi-distribution security baseline mappings file
+      ansible.builtin.include_vars:
+        file: vars_mapping.yml
+        name: distro_blueprint
+
+    # =========================================================================
+    # PLATFORM EXTENDED VARIABLE MATCHING MATRIX (PREVENTS LOOKUP ATTRIBUTE ERRORS)
+    # =========================================================================
+    - name: Map host platform operational security variables for Arch Linux
+      ansible.builtin.set_fact:
+        core_packages: "{{ distro_blueprint.arch_vars.core_packages }}"
+        arpwatch_user: "{{ distro_blueprint.arch_vars.arpwatch_user }}"
+        zram_conf_path: "{{ distro_blueprint.arch_vars.zram_conf_path }}"
+        audit_rules_path: "{{ distro_blueprint.arch_vars.audit_rules_path }}"
+        aide_db_path: "{{ distro_blueprint.arch_vars.aide_db_path }}"
+        clamav_service: "{{ distro_blueprint.arch_vars.clamav_service }}"
+      when: ansible_facts['os_family'] == 'Archlinux'
+
+    - name: Map host platform operational security variables for Debian
+      ansible.builtin.set_fact:
+        core_packages: "{{ distro_blueprint.debian_vars.core_packages }}"
+        arpwatch_user: "{{ distro_blueprint.debian_vars.arpwatch_user }}"
+        zram_conf_path: "{{ distro_blueprint.debian_vars.zram_conf_path }}"
+        audit_rules_path: "{{ distro_blueprint.debian_vars.audit_rules_path }}"
+        aide_db_path: "{{ distro_blueprint.debian_vars.aide_db_path }}"
+        clamav_service: "{{ distro_blueprint.debian_vars.clamav_service }}"
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Map host platform operational security variables for Fedora (RedHat)
+      ansible.builtin.set_fact:
+        core_packages: "{{ distro_blueprint.fedora_vars.core_packages }}"
+        arpwatch_user: "{{ distro_blueprint.fedora_vars.arpwatch_user }}"
+        zram_conf_path: "{{ distro_blueprint.fedora_vars.zram_conf_path }}"
+        audit_rules_path: "{{ distro_blueprint.fedora_vars.audit_rules_path }}"
+        aide_db_path: "{{ distro_blueprint.fedora_vars.aide_db_path }}"
+        clamav_service: "{{ distro_blueprint.fedora_vars.clamav_service }}"
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Map host platform operational security variables for openSUSE (Suse)
+      ansible.builtin.set_fact:
+        core_packages: "{{ distro_blueprint.suse_vars.core_packages }}"
+        arpwatch_user: "{{ distro_blueprint.suse_vars.arpwatch_user }}"
+        zram_conf_path: "{{ distro_blueprint.suse_vars.zram_conf_path }}"
+        audit_rules_path: "{{ distro_blueprint.suse_vars.audit_rules_path }}"
+        aide_db_path: "{{ distro_blueprint.suse_vars.aide_db_path }}"
+        clamav_service: "{{ distro_blueprint.suse_vars.clamav_service }}"
+      when: ansible_facts['os_family'] == 'Suse'
   tasks:
     - name: Output discovered turn-key hardware topology to execution logs
       ansible.builtin.debug:
@@ -210,8 +271,8 @@
       ansible.builtin.command: chattr +C /mnt/target/swapfile_mount/swapfile
       when: not ansible_check_mode
 
-    - name: Pre-allocate target space blocks for swap execution limits (2GB instance)
-      ansible.builtin.command: dd if=/dev/zero of=/mnt/target/swapfile_mount/swapfile bs=1M count=2048
+    - name: Pre-allocate target space blocks for Option B ratio swap execution limits
+      ansible.builtin.command: "dd if=/dev/zero of=/mnt/target/swapfile_mount/swapfile bs=1M count={{ stage1_swap_mb }}"
       when: not ansible_check_mode
 
     - name: Format the uncompressed target block structure as an operational swap space
@@ -236,7 +297,6 @@
       when: 
         - is_uefi
         - not ansible_check_mode
-
     - name: Execute Core Operating System Image Provisioning (Arch Linux Module)
       ansible.builtin.command: pacstrap -K /mnt/target base base-devel linux linux-lts linux-hardened linux-firmware btrfs-progs cryptsetup
       when: 
@@ -266,6 +326,7 @@
       when: 
         - ansible_facts['os_family'] == 'Suse'
         - not ansible_check_mode
+
     # =========================================================================
     # INTERACTIVE VAULT INITIALIZATION & AUTOMATED KEYFILE SLOTS (sda2)
     # =========================================================================
@@ -325,7 +386,6 @@
     - name: Instantly lock the vault container to secure files descriptors from RAM
       ansible.builtin.command: "cryptsetup close {{ vault_crypt_name }}"
       when: not ansible_check_mode
-
     # =========================================================================
     # SYSTEM CONFIGURATION MAPPINGS & CHROOT INTERFACES
     # =========================================================================
@@ -336,6 +396,15 @@
         - { src: "/dev/pts", path: "/dev/pts" }
         - { src: "/proc", path: "/proc" }
         - { src: "/sys", path: "/sys" }
+      when: not ansible_check_mode
+
+    - name: Copy host DNS configuration to prevent chroot network mirror failures
+      ansible.builtin.copy:
+        src: /etc/resolv.conf
+        dest: /mnt/target/etc/resolv.conf
+        owner: root
+        group: root
+        mode: '0644'
       when: not ansible_check_mode
 
     - name: Dynamically generate static file system configuration mapping table ledger
@@ -369,6 +438,7 @@
         group: root
         mode: '0644'
       when: not ansible_check_mode
+
     # =========================================================================
     # SYSTEM UTILITY BINARY WRAPPER DEPLOYMENT (vault open / close)
     # =========================================================================
@@ -455,9 +525,10 @@
       ansible.builtin.command: >
         {{ chroot_cmd }} {{
           'pacman -S --noconfirm grub networkmanager efibootmgr' if ansible_facts['os_family'] == 'Archlinux' else
-          'apt-get install -y linux-image-amd64 cryptsetup-initramfs grub-pc sudo' if (ansible_facts['os_family'] == 'Debian' and not is_uefi) else
-          'apt-get install -y linux-image-amd64 cryptsetup-initramfs grub-efi-amd64 efibootmgr sudo' if (ansible_facts['os_family'] == 'Debian' and is_uefi) else
-          'dnf install -y grub2-efi efibootmgr networkmanager sudo' if (ansible_facts['os_family'] == 'RedHat') else 'zypper install -y grub2-x86_64-efi efibootmgr NetworkManager sudo'
+          'apt-get update && apt-get install -y linux-image-amd64 cryptsetup-initramfs grub-pc sudo' if (ansible_facts['os_family'] == 'Debian' and not is_uefi) else
+          'apt-get update && apt-get install -y linux-image-amd64 cryptsetup-initramfs grub-efi-amd64 efibootmgr sudo' if (ansible_facts['os_family'] == 'Debian' and is_uefi) else
+          'dnf install -y grub2-efi efibootmgr networkmanager sudo' if (ansible_facts['os_family'] == 'RedHat') else 
+          'zypper install -y grub2-x86_64-efi efibootmgr NetworkManager sudo'
         }}
       when: not ansible_check_mode
 
@@ -471,7 +542,6 @@
         chmod 0440 /mnt/target/etc/sudoers.d/{{ target_username }}
       no_log: true
       when: not ansible_check_mode
-
     - name: Inject critical crypto modules and hooks into mkinitcpio configuration (Arch Linux)
       ansible.builtin.lineinfile:
         path: /mnt/target/etc/mkinitcpio.conf
